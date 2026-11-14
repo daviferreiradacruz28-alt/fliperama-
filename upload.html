@@ -26,8 +26,14 @@
         <textarea id="descricao" rows="3" maxlength="300"></textarea>
       </label>
       <label>Categoria
-        <input id="categoria" type="text" maxlength="30" placeholder="Arcade, Puzzle, Quiz...">
+        <select id="categoria" required>
+          <option value="" disabled selected>Escolha uma categoria</option>
+        </select>
       </label>
+      <label>Data de lançamento (opcional)
+        <input id="lancamento" type="datetime-local">
+      </label>
+      <p class="suave">Deixe vazio para o jogo já sair liberado. Com uma data futura, ele aparece em "Em breve" e só abre quando a data chegar.</p>
       <label>Arquivo do jogo (.html, até 50 MB)
         <input id="arquivo" type="file" required>
       </label>
@@ -43,15 +49,31 @@
   <script src="supabase.js"></script>
   <script>
     const MAX = 50 * 1024 * 1024;
+    const CATEGORIAS = ["Ação", "Aventura", "Arcade", "Corrida", "Esporte", "Estratégia", "Puzzle", "Quiz", "RPG", "Simulação", "Terror", "Outros"];
     const form = document.getElementById("form-jogo");
     const status = document.getElementById("status");
     const botao = document.getElementById("enviar");
+    const selCat = document.getElementById("categoria");
     const editId = new URLSearchParams(location.search).get("id");
     let jogoAtual = null;
+
+    CATEGORIAS.forEach((c) => {
+      const o = document.createElement("option");
+      o.value = c;
+      o.textContent = c;
+      selCat.appendChild(o);
+    });
 
     function extensao(nome) {
       const p = nome.split(".");
       return p.length > 1 ? p.pop().toLowerCase() : "";
+    }
+
+    function paraCampoLocal(iso) {
+      const d = new Date(iso);
+      const p = (n) => String(n).padStart(2, "0");
+      return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) +
+        "T" + p(d.getHours()) + ":" + p(d.getMinutes());
     }
 
     async function prepararEdicao() {
@@ -71,7 +93,16 @@
       jogoAtual = data;
       document.getElementById("nome").value = data.nome || "";
       document.getElementById("descricao").value = data.descricao || "";
-      document.getElementById("categoria").value = data.categoria || "";
+      if (data.categoria && !CATEGORIAS.includes(data.categoria)) {
+        const o = document.createElement("option");
+        o.value = data.categoria;
+        o.textContent = data.categoria;
+        selCat.appendChild(o);
+      }
+      selCat.value = data.categoria || "";
+      if (data.lancamento_em) {
+        document.getElementById("lancamento").value = paraCampoLocal(data.lancamento_em);
+      }
       status.textContent = "Deixe os arquivos vazios para manter os atuais.";
     }
 
@@ -79,11 +110,13 @@
       e.preventDefault();
       const nome = document.getElementById("nome").value.trim();
       const descricao = document.getElementById("descricao").value.trim();
-      const categoria = document.getElementById("categoria").value.trim();
+      const categoria = selCat.value;
+      const lanc = document.getElementById("lancamento").value;
+      const lancamentoEm = lanc ? new Date(lanc).toISOString() : null;
       const arquivo = document.getElementById("arquivo").files[0];
       const capa = document.getElementById("capa").files[0];
 
-      if (!nome || (!editId && !arquivo)) { status.textContent = "Preencha o nome e escolha o arquivo do jogo."; return; }
+      if (!nome || !categoria || (!editId && !arquivo)) { status.textContent = "Preencha o nome, a categoria e escolha o arquivo do jogo."; return; }
       if (arquivo && extensao(arquivo.name) !== "html") { status.textContent = "O jogo precisa ser um arquivo .html."; return; }
       if ((arquivo && arquivo.size > MAX) || (capa && capa.size > MAX)) { status.textContent = "Cada arquivo pode ter no máximo 50 MB."; return; }
 
@@ -108,7 +141,11 @@
         }
 
         if (editId && jogoAtual) {
-          const campos = { nome, descricao, categoria, atualizado_em: new Date().toISOString() };
+          const campos = {
+            nome, descricao, categoria,
+            lancamento_em: lancamentoEm,
+            atualizado_em: new Date().toISOString()
+          };
           if (caminhoJogo) campos.arquivo_html = caminhoJogo;
           if (caminhoCapa) campos.capa = caminhoCapa;
 
@@ -123,6 +160,7 @@
         } else {
           const r3 = await db.from("games").insert({
             nome, descricao, categoria,
+            lancamento_em: lancamentoEm,
             arquivo_html: caminhoJogo,
             capa: caminhoCapa
           });
