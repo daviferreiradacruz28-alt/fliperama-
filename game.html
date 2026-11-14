@@ -20,6 +20,20 @@
       width: 100vw; height: 100dvh; margin: 0; border: 0; border-radius: 0;
     }
     body.modo-cheio #sair-cheia { display: block; }
+
+    .bloco { margin-top: 1.5rem; }
+    .suave { color: var(--texto-suave); font-size: 0.9rem; }
+    .estrelas { display: flex; gap: 0.2rem; }
+    .estrela {
+      padding: 0.1rem; background: none; border: none;
+      font-size: 2rem; line-height: 1; color: var(--painel); cursor: pointer;
+    }
+    .estrela.ativa { color: #f5c518; }
+    #form-comentario { margin-bottom: 1rem; }
+    .comentario { padding: 0.8rem; margin-bottom: 0.6rem; background: var(--painel); border-radius: 4px; }
+    .comentario-topo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; }
+    .comentario p { margin-top: 0.3rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .apagar { margin-left: auto; background: none; border: none; color: #d9534f; font: inherit; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -38,6 +52,22 @@
       <button id="tela-cheia" class="botao" type="button">Tela cheia</button>
     </div>
     <iframe id="tela" class="tela" sandbox="allow-scripts" allow="fullscreen; autoplay"></iframe>
+
+    <section class="bloco">
+      <h2>Avaliação</h2>
+      <div id="estrelas" class="estrelas" role="group" aria-label="Avaliar de 1 a 5"></div>
+      <p id="resumo-nota" class="suave"></p>
+    </section>
+
+    <section class="bloco">
+      <h2>Comentários</h2>
+      <form id="form-comentario">
+        <textarea id="texto-comentario" rows="3" maxlength="500" placeholder="Escreva um comentário..." required></textarea>
+        <button class="botao" type="submit">Comentar</button>
+        <p id="aviso-comentario" class="suave"></p>
+      </form>
+      <div id="lista-comentarios"></div>
+    </section>
   </main>
 
   <button id="sair-cheia" type="button" aria-label="Sair da tela cheia">✕</button>
@@ -46,11 +76,138 @@
   <script src="supabase.js"></script>
   <script>
     const id = new URLSearchParams(location.search).get("id");
+    const jogoIdNum = Number(id);
     const titulo = document.getElementById("titulo");
     const tela = document.getElementById("tela");
     let jogo = null;
+    let userId = null;
+
+    function nomePerfil() {
+      try {
+        const p = JSON.parse(localStorage.getItem("perfil-fliperama"));
+        if (p && p.nome) return p.nome;
+      } catch (e) {}
+      return "Anônimo";
+    }
+
+    function desenharEstrelas(minha, media) {
+      const caixa = document.getElementById("estrelas");
+      caixa.innerHTML = "";
+      const valor = minha || Math.round(media);
+      for (let i = 1; i <= 5; i++) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "estrela" + (i <= valor ? " ativa" : "");
+        b.textContent = "★";
+        b.setAttribute("aria-label", i + (i === 1 ? " estrela" : " estrelas"));
+        b.addEventListener("click", () => avaliar(i));
+        caixa.appendChild(b);
+      }
+    }
+
+    async function carregarNotas() {
+      const { data: notas, error } = await db
+        .from("avaliacoes").select("nota, autor").eq("jogo_id", jogoIdNum);
+      if (error) return;
+      let soma = 0;
+      let minha = 0;
+      notas.forEach((a) => {
+        soma += a.nota;
+        if (a.autor === userId) minha = a.nota;
+      });
+      const media = notas.length ? soma / notas.length : 0;
+      desenharEstrelas(minha, media);
+      const resumo = document.getElementById("resumo-nota");
+      if (!notas.length) {
+        resumo.textContent = "Ainda sem avaliações. Seja o primeiro!";
+      } else {
+        resumo.textContent = "Média " + media.toFixed(1).replace(".", ",") + " · " +
+          notas.length + (notas.length === 1 ? " avaliação" : " avaliações") +
+          (minha ? " · sua nota: " + minha : "");
+      }
+    }
+
+    async function avaliar(nota) {
+      const { error } = await db.from("avaliacoes").upsert(
+        { jogo_id: jogoIdNum, autor: userId, nota: nota },
+        { onConflict: "jogo_id,autor" }
+      );
+      if (error) { alert("Não foi possível salvar sua nota."); return; }
+      carregarNotas();
+    }
+
+    async function carregarComentarios() {
+      const { data: lista, error } = await db
+        .from("comentarios").select("*").eq("jogo_id", jogoIdNum)
+        .order("criado_em", { ascending: false }).limit(50);
+      const area = document.getElementById("lista-comentarios");
+      area.innerHTML = "";
+      if (error) { area.textContent = "Não foi possível carregar os comentários."; return; }
+      if (!lista.length) {
+        const vazio = document.createElement("p");
+        vazio.className = "suave";
+        vazio.textContent = "Nenhum comentário ainda.";
+        area.appendChild(vazio);
+        return;
+      }
+      lista.forEach((c) => {
+        const item = document.createElement("div");
+        item.className = "comentario";
+        const cima = document.createElement("div");
+        cima.className = "comentario-topo";
+        const nome = document.createElement("strong");
+        nome.textContent = c.nome;
+        const dia = document.createElement("span");
+        dia.className = "suave";
+        dia.textContent = new Date(c.criado_em).toLocaleDateString("pt-BR");
+        cima.append(nome, dia);
+        if (userId && c.autor === userId) {
+          const apagar = document.createElement("button");
+          apagar.type = "button";
+          apagar.className = "apagar";
+          apagar.textContent = "Apagar";
+          apagar.addEventListener("click", () => apagarComentario(c.id));
+          cima.appendChild(apagar);
+        }
+        const texto = document.createElement("p");
+        texto.textContent = c.texto;
+        item.append(cima, texto);
+        area.appendChild(item);
+      });
+    }
+
+    async function apagarComentario(cid) {
+      if (!confirm("Apagar este comentário?")) return;
+      const { error } = await db.from("comentarios").delete().eq("id", cid);
+      if (error) { alert("Não foi possível apagar."); return; }
+      carregarComentarios();
+    }
+
+    document.getElementById("form-comentario").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const campo = document.getElementById("texto-comentario");
+      const texto = campo.value.trim();
+      if (!texto) return;
+      const { error } = await db.from("comentarios").insert({
+        jogo_id: jogoIdNum,
+        nome: nomePerfil().slice(0, 30),
+        texto: texto
+      });
+      if (error) { alert("Não foi possível enviar o comentário."); return; }
+      campo.value = "";
+      carregarComentarios();
+    });
 
     async function abrir() {
+      await garantirLogin();
+      const { data: sessao } = await db.auth.getSession();
+      userId = sessao.session ? sessao.session.user.id : null;
+
+      if (nomePerfil() === "Anônimo") {
+        document.getElementById("aviso-comentario").textContent =
+          "Crie seu perfil (o círculo no topo) para comentar com o seu nome.";
+      }
+
       const { data, error } = await db.from("games").select("*").eq("id", id).single();
       if (error || !data) { titulo.textContent = "Jogo não encontrado"; return; }
       jogo = data;
@@ -59,11 +216,13 @@
       document.title = jogo.nome;
       document.getElementById("descricao").textContent = jogo.descricao || "";
 
-      const { data: sessao } = await db.auth.getSession();
-      if (sessao.session && sessao.session.user.id === jogo.autor) {
+      if (userId && userId === jogo.autor) {
         document.getElementById("acoes").hidden = false;
         document.getElementById("editar").href = "upload.html?id=" + jogo.id;
       }
+
+      carregarNotas();
+      carregarComentarios();
 
       const { data: arquivo, error: erroArq } = await db.storage.from("games").download(jogo.arquivo_html);
       if (erroArq) { titulo.textContent = "Não foi possível abrir o jogo"; return; }
