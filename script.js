@@ -98,7 +98,7 @@ function mostrarJogos() {
     desc.className = "desc";
     desc.textContent = j.descricao || "";
 
-    info.append(titulo, cat, desc, criarEstrelas(notas[j.id]));
+    const dt = document.createElement("div"); dt.className = "cat"; dt.textContent = j.atualizado_em ? "Atualizado em " + new Date(j.atualizado_em).toLocaleDateString("pt-BR") : "Lançado em " + new Date(j.criado_em).toLocaleDateString("pt-BR"); info.append(titulo, cat, desc, criarEstrelas(notas[j.id]), dt);
     cartao.append(capa, info);
     catalogo.appendChild(cartao);
   });

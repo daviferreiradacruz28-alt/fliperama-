@@ -108,7 +108,7 @@
         }
 
         if (editId && jogoAtual) {
-          const campos = { nome, descricao, categoria };
+          const campos = { nome, descricao, categoria, atualizado_em: new Date().toISOString() };
           if (caminhoJogo) campos.arquivo_html = caminhoJogo;
           if (caminhoCapa) campos.capa = caminhoCapa;
 

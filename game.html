@@ -48,6 +48,7 @@
 
   <main>
     <p id="descricao"></p>
+    <p id="datas" class="suave"></p>
     <div id="acoes" class="acoes" hidden>
       <a id="editar" class="botao" href="#">Editar</a>
       <button id="excluir" class="botao perigo" type="button">Excluir</button>
@@ -202,6 +203,7 @@
       carregarComentarios();
     });
 
+    function mostrarDatas(j) { const f = (d) => new Date(d).toLocaleDateString("pt-BR"); let t = "Lançado em " + f(j.criado_em); if (j.atualizado_em) t += " · Atualizado em " + f(j.atualizado_em); document.getElementById("datas").textContent = t; }
     async function abrir() {
       await garantirLogin();
       const { data: sessao } = await db.auth.getSession();
@@ -219,6 +221,7 @@
       titulo.textContent = jogo.nome;
       document.title = jogo.nome;
       document.getElementById("descricao").textContent = jogo.descricao || "";
+      mostrarDatas(jogo);
 
       if (userId && userId === jogo.autor) {
         document.getElementById("acoes").hidden = false;
