@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jogar</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topo">
+    <h1 id="titulo">Carregando...</h1>
+    <a class="botao" href="index.html">Voltar</a>
+  </header>
+
+  <main>
+    <p id="descricao"></p>
+    <div id="acoes" class="acoes" hidden>
+      <a id="editar" class="botao" href="#">Editar</a>
+      <button id="excluir" class="botao perigo" type="button">Excluir</button>
+    </div>
+    <iframe id="tela" class="tela" sandbox="allow-scripts"></iframe>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <script>
+    const id = new URLSearchParams(location.search).get("id");
+    const titulo = document.getElementById("titulo");
+    let jogo = null;
+
+    async function abrir() {
+      const { data, error } = await db.from("games").select("*").eq("id", id).single();
+      if (error || !data) { titulo.textContent = "Jogo não encontrado"; return; }
+      jogo = data;
+
+      titulo.textContent = jogo.nome;
+      document.title = jogo.nome;
+      document.getElementById("descricao").textContent = jogo.descricao || "";
+
+      // Só o dono (mesmo navegador que enviou) vê Editar e Excluir
+      const { data: sessao } = await db.auth.getSession();
+      if (sessao.session && sessao.session.user.id === jogo.autor) {
+        document.getElementById("acoes").hidden = false;
+        document.getElementById("editar").href = "upload.html?id=" + jogo.id;
+      }
+
+      const { data: arquivo, error: erroArq } = await db.storage.from("games").download(jogo.arquivo_html);
+      if (erroArq) { titulo.textContent = "Não foi possível abrir o jogo"; return; }
+
+      // O jogo roda isolado: sandbox sem allow-same-origin
+      document.getElementById("tela").srcdoc = await arquivo.text();
+    }
+
+    async function excluir() {
+      if (!confirm("Excluir este jogo? Isso não pode ser desfeito.")) return;
+
+      const { data, error } = await db.from("games").delete().eq("id", jogo.id).select();
+      if (error || !data || data.length === 0) {
+        alert("Não foi possível excluir este jogo.");
+        return;
+      }
+      await db.storage.from("games").remove([jogo.arquivo_html]);
+      if (jogo.capa) await db.storage.from("covers").remove([jogo.capa]);
+      location.href = "index.html";
+    }
+
+    document.getElementById("excluir").addEventListener("click", excluir);
+    abrir();
+  </script>
+</body>
+</html>

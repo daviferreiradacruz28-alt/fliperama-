@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fliperama dos Amigos</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="topo">
+    <h1>Fliperama dos Amigos</h1>
+    <a class="botao" href="upload.html">Enviar jogo</a>
+  </header>
+
+  <main>
+    <section class="filtros">
+      <input id="busca" type="search" placeholder="Buscar jogo pelo nome">
+      <div id="categorias" class="categorias"></div>
+    </section>
+
+    <section id="catalogo" class="catalogo"></section>
+    <p id="vazio" class="vazio" hidden>Nenhum jogo encontrado.</p>
+  </main>
+
+  <footer class="rodape">
+    <p>Jogos feitos com IA pelos amigos.</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

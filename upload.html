@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Enviar jogo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topo">
+    <h1 id="titulo-pagina">Enviar jogo</h1>
+    <a class="botao" href="index.html">Voltar</a>
+  </header>
+
+  <main>
+    <form id="form-jogo">
+      <label>Nome do jogo
+        <input id="nome" type="text" maxlength="60" required>
+      </label>
+      <label>Descrição
+        <textarea id="descricao" rows="3" maxlength="300"></textarea>
+      </label>
+      <label>Categoria
+        <input id="categoria" type="text" maxlength="30" placeholder="Arcade, Puzzle, Quiz...">
+      </label>
+      <label>Arquivo do jogo (.html, até 2 MB)
+        <input id="arquivo" type="file" required>
+      </label>
+      <label>Capa (imagem, opcional)
+        <input id="capa" type="file" accept="image/*">
+      </label>
+      <button class="botao" type="submit" id="enviar">Publicar</button>
+      <p id="status"></p>
+    </form>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <script>
+    const MAX = 2 * 1024 * 1024;
+    const form = document.getElementById("form-jogo");
+    const status = document.getElementById("status");
+    const botao = document.getElementById("enviar");
+    const editId = new URLSearchParams(location.search).get("id");
+    let jogoAtual = null;
+
+    function extensao(nome) {
+      const p = nome.split(".");
+      return p.length > 1 ? p.pop().toLowerCase() : "";
+    }
+
+    async function prepararEdicao() {
+      if (!editId) return;
+      document.getElementById("titulo-pagina").textContent = "Editar jogo";
+      document.title = "Editar jogo";
+      botao.textContent = "Salvar alterações";
+      document.getElementById("arquivo").required = false;
+
+      const { data, error } = await db.from("games").select("*").eq("id", editId).single();
+      const { data: sessao } = await db.auth.getSession();
+      if (error || !data || !sessao.session || sessao.session.user.id !== data.autor) {
+        status.textContent = "Você não pode editar este jogo.";
+        botao.disabled = true;
+        return;
+      }
+      jogoAtual = data;
+      document.getElementById("nome").value = data.nome || "";
+      document.getElementById("descricao").value = data.descricao || "";
+      document.getElementById("categoria").value = data.categoria || "";
+      status.textContent = "Deixe os arquivos vazios para manter os atuais.";
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const nome = document.getElementById("nome").value.trim();
+      const descricao = document.getElementById("descricao").value.trim();
+      const categoria = document.getElementById("categoria").value.trim();
+      const arquivo = document.getElementById("arquivo").files[0];
+      const capa = document.getElementById("capa").files[0];
+
+      if (!nome || (!editId && !arquivo)) { status.textContent = "Preencha o nome e escolha o arquivo do jogo."; return; }
+      if (arquivo && extensao(arquivo.name) !== "html") { status.textContent = "O jogo precisa ser um arquivo .html."; return; }
+      if ((arquivo && arquivo.size > MAX) || (capa && capa.size > MAX)) { status.textContent = "Cada arquivo pode ter no máximo 2 MB."; return; }
+
+      botao.disabled = true;
+      status.textContent = "Enviando...";
+
+      try {
+        await garantirLogin();
+
+        let caminhoJogo = null;
+        if (arquivo) {
+          caminhoJogo = crypto.randomUUID() + ".html";
+          const r1 = await db.storage.from("games").upload(caminhoJogo, arquivo, { contentType: "text/html" });
+          if (r1.error) throw r1.error;
+        }
+
+        let caminhoCapa = null;
+        if (capa) {
+          caminhoCapa = crypto.randomUUID() + "." + (extensao(capa.name) || "png");
+          const r2 = await db.storage.from("covers").upload(caminhoCapa, capa);
+          if (r2.error) throw r2.error;
+        }
+
+        if (editId && jogoAtual) {
+          const campos = { nome, descricao, categoria };
+          if (caminhoJogo) campos.arquivo_html = caminhoJogo;
+          if (caminhoCapa) campos.capa = caminhoCapa;
+
+          const r3 = await db.from("games").update(campos).eq("id", jogoAtual.id).select();
+          if (r3.error || !r3.data || r3.data.length === 0) throw new Error("Sem permissão para editar.");
+
+          if (caminhoJogo) await db.storage.from("games").remove([jogoAtual.arquivo_html]);
+          if (caminhoCapa && jogoAtual.capa) await db.storage.from("covers").remove([jogoAtual.capa]);
+
+          status.textContent = "Alterações salvas!";
+          setTimeout(() => { location.href = "game.html?id=" + jogoAtual.id; }, 1000);
+        } else {
+          const r3 = await db.from("games").insert({
+            nome, descricao, categoria,
+            arquivo_html: caminhoJogo,
+            capa: caminhoCapa
+          });
+          if (r3.error) throw r3.error;
+
+          status.textContent = "Jogo publicado!";
+          setTimeout(() => { location.href = "index.html"; }, 1200);
+        }
+      } catch (err) {
+        console.error(err);
+        status.textContent = "Erro ao enviar: " + (err.message || "tente de novo.");
+        botao.disabled = false;
+      }
+    });
+
+    prepararEdicao();
+  </script>
+</body>
+</html>
