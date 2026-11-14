@@ -6,6 +6,7 @@ const aviso = document.getElementById("vazio");
 
 let jogos = [];
 let notas = {};
+let jogadas = {};
 let categoriaAtual = "Todas";
 
 const lancado = (j) => !j.lancamento_em || new Date(j.lancamento_em) <= new Date();
@@ -81,7 +82,7 @@ function criarCartao(j, breve) {
     dt.textContent = j.atualizado_em
       ? "Atualizado em " + dataBR(j.atualizado_em)
       : "Lançado em " + dataBR(j.criado_em);
-    info.append(criarEstrelas(notas[j.id]), dt);
+    const jg = document.createElement("div"); jg.className = "cat"; const n = jogadas[j.id] || 0; jg.textContent = "👥 " + n + (n === 1 ? " pessoa jogou" : " pessoas jogaram"); info.append(criarEstrelas(notas[j.id]), dt, jg);
   }
 
   cartao.append(capa, info);
@@ -184,6 +185,7 @@ async function carregar() {
     notas[a.jogo_id] = n;
   });
 
+  const { data: cont } = await db.from("contagem_jogadas").select("jogo_id, total"); jogadas = {}; (cont || []).forEach((c) => { jogadas[c.jogo_id] = c.total; });
   criarCategorias();
   mostrarJogos();
 }

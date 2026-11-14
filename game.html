@@ -138,6 +138,7 @@
         { onConflict: "jogo_id,autor" }
       );
       if (error) { alert("Não foi possível salvar sua nota."); return; }
+      if (userId) db.from("jogadas").upsert({ jogo_id: jogoIdNum, jogador: userId }, { onConflict: "jogo_id,jogador", ignoreDuplicates: true });
       carregarNotas();
     }
 
@@ -228,6 +229,7 @@
         document.getElementById("editar").href = "upload.html?id=" + jogo.id;
       }
 
+      if (userId) db.from("jogadas").upsert({ jogo_id: jogoIdNum, jogador: userId }, { onConflict: "jogo_id,jogador", ignoreDuplicates: true });
       carregarNotas();
       carregarComentarios();
 
