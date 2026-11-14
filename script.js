@@ -126,6 +126,7 @@ function mostrarJogos() {
   const filtrados = jogos.filter((j) => j.nome.toLowerCase().includes(texto));
   catalogo.innerHTML = "";
   let total = 0;
+  const novos = filtrados.filter(lancado); if (categoriaAtual === "Todas") { if (novos.length) { catalogo.appendChild(criarFileira("Novidades", novos, false)); total++; } }
 
   const breves = filtrados
     .filter((j) => !lancado(j))
