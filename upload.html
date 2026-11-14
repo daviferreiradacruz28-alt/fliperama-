@@ -23,7 +23,7 @@
       <label>Categoria
         <input id="categoria" type="text" maxlength="30" placeholder="Arcade, Puzzle, Quiz...">
       </label>
-      <label>Arquivo do jogo (.html, até 2 MB)
+      <label>Arquivo do jogo (.html, até 50 MB)
         <input id="arquivo" type="file" required>
       </label>
       <label>Capa (imagem, opcional)
@@ -37,7 +37,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase.js"></script>
   <script>
-    const MAX = 2 * 1024 * 1024;
+    const MAX = 50 * 1024 * 1024;
     const form = document.getElementById("form-jogo");
     const status = document.getElementById("status");
     const botao = document.getElementById("enviar");
@@ -80,7 +80,7 @@
 
       if (!nome || (!editId && !arquivo)) { status.textContent = "Preencha o nome e escolha o arquivo do jogo."; return; }
       if (arquivo && extensao(arquivo.name) !== "html") { status.textContent = "O jogo precisa ser um arquivo .html."; return; }
-      if ((arquivo && arquivo.size > MAX) || (capa && capa.size > MAX)) { status.textContent = "Cada arquivo pode ter no máximo 2 MB."; return; }
+      if ((arquivo && arquivo.size > MAX) || (capa && capa.size > MAX)) { status.textContent = "Cada arquivo pode ter no máximo 50 MB."; return; }
 
       botao.disabled = true;
       status.textContent = "Enviando...";
