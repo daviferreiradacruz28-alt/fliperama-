@@ -148,3 +148,7 @@ button.botao { border: none; font: inherit; font-weight: 700; cursor: pointer; }
   width: 100vw; height: 100dvh; margin: 0; border: 0; border-radius: 0;
 }
 .modo-cheio #sair-cheia { display: block; }
+.nota-card { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.5rem; font-size: 0.85rem; }
+.nota-card.sem-nota { color: var(--texto-suave); }
+.estrela-mini { color: var(--fundo-escuro); }
+.estrela-mini.ativa { color: #f5c518; }

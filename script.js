@@ -5,11 +5,40 @@ const catalogo = document.getElementById("catalogo");
 const aviso = document.getElementById("vazio");
 
 let jogos = [];
+let notas = {};
 let categoriaAtual = "Todas";
 
 function urlCapa(caminho) {
   if (!caminho) return null;
   return db.storage.from("covers").getPublicUrl(caminho).data.publicUrl;
+}
+
+function criarEstrelas(info) {
+  const div = document.createElement("div");
+  div.className = "nota-card";
+
+  if (!info) {
+    div.textContent = "Sem avaliações";
+    div.classList.add("sem-nota");
+    return div;
+  }
+
+  const media = info.soma / info.qtd;
+  const cheias = Math.round(media);
+
+  const estrelas = document.createElement("span");
+  for (let i = 1; i <= 5; i++) {
+    const e = document.createElement("span");
+    e.className = "estrela-mini" + (i <= cheias ? " ativa" : "");
+    e.textContent = "★";
+    estrelas.appendChild(e);
+  }
+
+  const texto = document.createElement("span");
+  texto.textContent = media.toFixed(1).replace(".", ",") + " (" + info.qtd + ")";
+
+  div.append(estrelas, texto);
+  return div;
 }
 
 function criarCategorias() {
@@ -69,7 +98,7 @@ function mostrarJogos() {
     desc.className = "desc";
     desc.textContent = j.descricao || "";
 
-    info.append(titulo, cat, desc);
+    info.append(titulo, cat, desc, criarEstrelas(notas[j.id]));
     cartao.append(capa, info);
     catalogo.appendChild(cartao);
   });
@@ -88,6 +117,17 @@ async function carregar() {
     return;
   }
   jogos = data;
+
+  // Busca todas as notas e calcula a média de cada jogo
+  const { data: av } = await db.from("avaliacoes").select("jogo_id, nota");
+  notas = {};
+  (av || []).forEach((a) => {
+    const n = notas[a.jogo_id] || { soma: 0, qtd: 0 };
+    n.soma += a.nota;
+    n.qtd += 1;
+    notas[a.jogo_id] = n;
+  });
+
   criarCategorias();
   mostrarJogos();
 }
