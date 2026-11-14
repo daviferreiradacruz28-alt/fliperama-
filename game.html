@@ -6,6 +6,21 @@
   <title>Jogar</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="perfil.css">
+  <style>
+    .tela { height: 80dvh; }
+    #sair-cheia {
+      display: none; position: fixed; top: 8px; right: 8px; z-index: 101;
+      width: 36px; height: 36px; padding: 0;
+      background: rgba(0, 0, 0, 0.6); color: #fff;
+      border: none; border-radius: 50%; font-size: 1rem; cursor: pointer;
+    }
+    body.modo-cheio { overflow: hidden; }
+    body.modo-cheio .tela {
+      position: fixed; inset: 0; z-index: 100;
+      width: 100vw; height: 100dvh; margin: 0; border: 0; border-radius: 0;
+    }
+    body.modo-cheio #sair-cheia { display: block; }
+  </style>
 </head>
 <body>
   <header class="topo">
@@ -19,18 +34,20 @@
       <a id="editar" class="botao" href="#">Editar</a>
       <button id="excluir" class="botao perigo" type="button">Excluir</button>
     </div>
-    <button id="tela-cheia" class="botao" type="button">Tela cheia</button>
-    <button id="tela-cheia" class="botao" type="button">Tela cheia</button>
+    <div class="acoes">
+      <button id="tela-cheia" class="botao" type="button">Tela cheia</button>
+    </div>
     <iframe id="tela" class="tela" sandbox="allow-scripts" allow="fullscreen; autoplay"></iframe>
-    <button id="sair-cheia" type="button" aria-label="Sair da tela cheia">✕</button>
-    <button id="sair-cheia" type="button" aria-label="Sair da tela cheia">✕</button>
   </main>
+
+  <button id="sair-cheia" type="button" aria-label="Sair da tela cheia">✕</button>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase.js"></script>
   <script>
     const id = new URLSearchParams(location.search).get("id");
     const titulo = document.getElementById("titulo");
+    const tela = document.getElementById("tela");
     let jogo = null;
 
     async function abrir() {
@@ -42,7 +59,6 @@
       document.title = jogo.nome;
       document.getElementById("descricao").textContent = jogo.descricao || "";
 
-      // Só o dono (mesmo navegador que enviou) vê Editar e Excluir
       const { data: sessao } = await db.auth.getSession();
       if (sessao.session && sessao.session.user.id === jogo.autor) {
         document.getElementById("acoes").hidden = false;
@@ -52,13 +68,11 @@
       const { data: arquivo, error: erroArq } = await db.storage.from("games").download(jogo.arquivo_html);
       if (erroArq) { titulo.textContent = "Não foi possível abrir o jogo"; return; }
 
-      // O jogo roda isolado: sandbox sem allow-same-origin
-      document.getElementById("tela").srcdoc = await arquivo.text();
+      tela.srcdoc = await arquivo.text();
     }
 
     async function excluir() {
       if (!confirm("Excluir este jogo? Isso não pode ser desfeito.")) return;
-
       const { data, error } = await db.from("games").delete().eq("id", jogo.id).select();
       if (error || !data || data.length === 0) {
         alert("Não foi possível excluir este jogo.");
@@ -70,10 +84,25 @@
     }
 
     document.getElementById("excluir").addEventListener("click", excluir);
+
+    document.getElementById("tela-cheia").addEventListener("click", async () => {
+      document.body.classList.add("modo-cheio");
+      try {
+        if (tela.requestFullscreen) await tela.requestFullscreen();
+      } catch (e) {}
+    });
+
+    document.getElementById("sair-cheia").addEventListener("click", () => {
+      document.body.classList.remove("modo-cheio");
+      if (document.fullscreenElement) document.exitFullscreen();
+    });
+
+    document.addEventListener("fullscreenchange", () => {
+      if (!document.fullscreenElement) document.body.classList.remove("modo-cheio");
+    });
+
     abrir();
   </script>
   <script src="perfil.js"></script>
-  <script src="cheia.js"></script>
-  <script src="cheia.js"></script>
 </body>
 </html>
