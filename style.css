@@ -133,3 +133,18 @@ button.botao { border: none; font: inherit; font-weight: 700; cursor: pointer; }
 .acoes { display: flex; gap: 0.6rem; margin-top: 1rem; }
 .perigo { background: #c0392b; }
 .perigo:hover { background: #d9534f; }
+
+.tela { height: 80dvh; }
+#tela-cheia { margin-top: 1rem; }
+#sair-cheia {
+  display: none; position: fixed; top: 8px; right: 8px; z-index: 101;
+  width: 36px; height: 36px; padding: 0;
+  background: rgba(0, 0, 0, 0.6); color: #fff;
+  border: none; border-radius: 50%; font-size: 1rem; cursor: pointer;
+}
+.modo-cheio { overflow: hidden; }
+.modo-cheio .tela {
+  position: fixed; inset: 0; z-index: 100;
+  width: 100vw; height: 100dvh; margin: 0; border: 0; border-radius: 0;
+}
+.modo-cheio #sair-cheia { display: block; }
