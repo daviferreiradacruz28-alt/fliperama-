@@ -6,6 +6,10 @@
   <title>Jogar</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="perfil.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#171a21">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <style>
     .tela { height: 80dvh; }
     #sair-cheia {
@@ -23,6 +27,10 @@
 
     .bloco { margin-top: 1.5rem; }
     .suave { color: var(--texto-suave); font-size: 0.9rem; }
+    .bloqueio {
+      margin-top: 1rem; padding: 2rem 1rem; text-align: center;
+      background: var(--painel); border-radius: 4px;
+    }
     .estrelas { display: flex; gap: 0.2rem; }
     .estrela {
       padding: 0.1rem; background: none; border: none;
@@ -35,10 +43,6 @@
     .comentario p { margin-top: 0.3rem; overflow-wrap: anywhere; white-space: pre-wrap; }
     .apagar { margin-left: auto; background: none; border: none; color: #d9534f; font: inherit; cursor: pointer; }
   </style>
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#171a21">
-  <link rel="icon" href="icon-192.png">
-  <link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
   <header class="topo">
@@ -48,23 +52,28 @@
 
   <main>
     <p id="descricao"></p>
+    <p id="autor" class="suave"></p>
     <p id="datas" class="suave"></p>
+
     <div id="acoes" class="acoes" hidden>
       <a id="editar" class="botao" href="#">Editar</a>
       <button id="excluir" class="botao perigo" type="button">Excluir</button>
     </div>
     <div class="acoes">
       <button id="tela-cheia" class="botao" type="button">Tela cheia</button>
+      <button id="favoritar" class="botao neutro" type="button">♡ Favoritar</button>
     </div>
+
+    <div id="bloqueio" class="bloqueio" hidden></div>
     <iframe id="tela" class="tela" sandbox="allow-scripts" allow="fullscreen; autoplay"></iframe>
 
-    <section class="bloco">
+    <section id="bloco-avaliacao" class="bloco">
       <h2>Avaliação</h2>
       <div id="estrelas" class="estrelas" role="group" aria-label="Avaliar de 1 a 5"></div>
       <p id="resumo-nota" class="suave"></p>
     </section>
 
-    <section class="bloco">
+    <section id="bloco-comentarios" class="bloco">
       <h2>Comentários</h2>
       <form id="form-comentario">
         <textarea id="texto-comentario" rows="3" maxlength="500" placeholder="Escreva um comentário..." required></textarea>
@@ -86,6 +95,7 @@
     const tela = document.getElementById("tela");
     let jogo = null;
     let userId = null;
+    let favorito = false;
 
     function nomePerfil() {
       try {
@@ -93,6 +103,56 @@
         if (p && p.nome) return p.nome;
       } catch (e) {}
       return "Anônimo";
+    }
+
+    function mostrarDatas(j) {
+      const f = (d) => new Date(d).toLocaleDateString("pt-BR");
+      const fh = (d) => new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+      let t;
+      if (j.lancamento_em && new Date(j.lancamento_em) > new Date()) {
+        t = "Lança em " + fh(j.lancamento_em);
+      } else {
+        t = "Lançado em " + f(j.lancamento_em || j.criado_em);
+        if (j.atualizado_em) t += " · Atualizado em " + f(j.atualizado_em);
+      }
+      document.getElementById("datas").textContent = t;
+    }
+
+    async function carregarAutor() {
+      const caixa = document.getElementById("autor");
+      caixa.textContent = "Por ";
+      if (!jogo.autor) { caixa.textContent = "Por Anônimo"; return; }
+      const { data } = await db.from("perfis").select("nome").eq("id", jogo.autor).maybeSingle();
+      const a = document.createElement("a");
+      a.href = "perfil.html?id=" + jogo.autor;
+      a.textContent = data ? data.nome : "Anônimo";
+      caixa.appendChild(a);
+    }
+
+    function pintarFavorito() {
+      document.getElementById("favoritar").textContent = favorito ? "♥ Favoritado" : "♡ Favoritar";
+    }
+
+    async function carregarFavorito() {
+      const { data } = await db.from("favoritos").select("jogo_id").eq("jogo_id", jogoIdNum).maybeSingle();
+      favorito = !!data;
+      pintarFavorito();
+    }
+
+    async function alternarFavorito() {
+      if (!userId) return;
+      let erro;
+      if (favorito) {
+        erro = (await db.from("favoritos").delete().eq("jogo_id", jogoIdNum).eq("usuario", userId)).error;
+      } else {
+        erro = (await db.from("favoritos").upsert(
+          { jogo_id: jogoIdNum, usuario: userId },
+          { onConflict: "jogo_id,usuario", ignoreDuplicates: true }
+        )).error;
+      }
+      if (erro) { alert("Não foi possível atualizar os favoritos."); return; }
+      favorito = !favorito;
+      pintarFavorito();
     }
 
     function desenharEstrelas(minha, media) {
@@ -138,7 +198,6 @@
         { onConflict: "jogo_id,autor" }
       );
       if (error) { alert("Não foi possível salvar sua nota."); return; }
-      if (userId) db.from("jogadas").upsert({ jogo_id: jogoIdNum, jogador: userId }, { onConflict: "jogo_id,jogador", ignoreDuplicates: true });
       carregarNotas();
     }
 
@@ -204,7 +263,6 @@
       carregarComentarios();
     });
 
-    function mostrarDatas(j) { const f = (d) => new Date(d).toLocaleDateString("pt-BR"); let t = "Lançado em " + f(j.criado_em); if (j.atualizado_em) t += " · Atualizado em " + f(j.atualizado_em); document.getElementById("datas").textContent = t; }
     async function abrir() {
       await garantirLogin();
       const { data: sessao } = await db.auth.getSession();
@@ -223,13 +281,40 @@
       document.title = jogo.nome;
       document.getElementById("descricao").textContent = jogo.descricao || "";
       mostrarDatas(jogo);
+      carregarAutor();
+      carregarFavorito();
 
-      if (userId && userId === jogo.autor) {
+      const dono = !!userId && userId === jogo.autor;
+      if (dono) {
         document.getElementById("acoes").hidden = false;
         document.getElementById("editar").href = "upload.html?id=" + jogo.id;
       }
 
-      if (userId) db.from("jogadas").upsert({ jogo_id: jogoIdNum, jogador: userId }, { onConflict: "jogo_id,jogador", ignoreDuplicates: true });
+      // Jogo "Em breve": só o dono pode abrir antes da data
+      const naoLancado = jogo.lancamento_em && new Date(jogo.lancamento_em) > new Date();
+      if (naoLancado && !dono) {
+        const b = document.getElementById("bloqueio");
+        b.hidden = false;
+        b.textContent = "Este jogo ainda não foi lançado. Ele abre em " +
+          new Date(jogo.lancamento_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) + ".";
+        tela.hidden = true;
+        document.getElementById("tela-cheia").hidden = true;
+        document.getElementById("bloco-avaliacao").hidden = true;
+        document.getElementById("bloco-comentarios").hidden = true;
+        return;
+      }
+      if (naoLancado && dono) {
+        document.getElementById("datas").textContent += " · Prévia: só você consegue jogar até a data";
+      }
+
+      // Conta uma pessoa por jogo (quem abre de novo não conta outra vez)
+      if (userId && !naoLancado) {
+        db.from("jogadas").upsert(
+          { jogo_id: jogoIdNum, jogador: userId },
+          { onConflict: "jogo_id,jogador", ignoreDuplicates: true }
+        );
+      }
+
       carregarNotas();
       carregarComentarios();
 
@@ -252,6 +337,7 @@
     }
 
     document.getElementById("excluir").addEventListener("click", excluir);
+    document.getElementById("favoritar").addEventListener("click", alternarFavorito);
 
     document.getElementById("tela-cheia").addEventListener("click", async () => {
       document.body.classList.add("modo-cheio");
