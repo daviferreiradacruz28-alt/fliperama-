@@ -1,4 +1,4 @@
-// Catálogo em fileiras, estilo Netflix
+// Catálogo em fileiras, com criador e favoritos
 const campoBusca = document.getElementById("busca");
 const areaCategorias = document.getElementById("categorias");
 const catalogo = document.getElementById("catalogo");
@@ -7,6 +7,8 @@ const aviso = document.getElementById("vazio");
 let jogos = [];
 let notas = {};
 let jogadas = {};
+let autores = {};
+let favoritos = new Set();
 let categoriaAtual = "Todas";
 
 const lancado = (j) => !j.lancamento_em || new Date(j.lancamento_em) <= new Date();
@@ -40,6 +42,34 @@ function criarEstrelas(info) {
   return div;
 }
 
+function atualizarCoracao(b) {
+  const on = favoritos.has(Number(b.dataset.fav));
+  b.textContent = on ? "♥" : "♡";
+  b.classList.toggle("ativo", on);
+  b.setAttribute("aria-label", on ? "Remover dos favoritos" : "Favoritar");
+}
+
+async function alternarFavorito(j) {
+  const { data: s } = await db.auth.getSession();
+  const uid = s.session && s.session.user.id;
+  if (!uid) return;
+  const ativo = favoritos.has(j.id);
+  let erro;
+  if (ativo) {
+    const r = await db.from("favoritos").delete().eq("jogo_id", j.id).eq("usuario", uid);
+    erro = r.error;
+  } else {
+    const r = await db.from("favoritos").upsert(
+      { jogo_id: j.id, usuario: uid },
+      { onConflict: "jogo_id,usuario", ignoreDuplicates: true }
+    );
+    erro = r.error;
+  }
+  if (erro) { alert("Não foi possível atualizar os favoritos."); return; }
+  if (ativo) favoritos.delete(j.id); else favoritos.add(j.id);
+  document.querySelectorAll('[data-fav="' + j.id + '"]').forEach(atualizarCoracao);
+}
+
 function criarCartao(j, breve) {
   const cartao = document.createElement("a");
   cartao.className = "cartao";
@@ -64,6 +94,18 @@ function criarCartao(j, breve) {
     capa.appendChild(selo);
   }
 
+  const cor = document.createElement("button");
+  cor.type = "button";
+  cor.className = "coracao";
+  cor.dataset.fav = j.id;
+  atualizarCoracao(cor);
+  cor.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    alternarFavorito(j);
+  });
+  capa.appendChild(cor);
+
   const info = document.createElement("div");
   info.className = "info";
   const titulo = document.createElement("h2");
@@ -71,10 +113,24 @@ function criarCartao(j, breve) {
   const cat = document.createElement("div");
   cat.className = "cat";
   cat.textContent = j.categoria || "";
+
+  const autor = document.createElement("span");
+  autor.className = "autor-link";
+  autor.setAttribute("role", "link");
+  autor.tabIndex = 0;
+  autor.textContent = "por " + (autores[j.autor] || "Anônimo");
+  const irAutor = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (j.autor) location.href = "perfil.html?id=" + j.autor;
+  };
+  autor.addEventListener("click", irAutor);
+  autor.addEventListener("keydown", (e) => { if (e.key === "Enter") irAutor(e); });
+
   const desc = document.createElement("p");
   desc.className = "desc";
   desc.textContent = j.descricao || "";
-  info.append(titulo, cat, desc);
+  info.append(titulo, cat, autor, desc);
 
   if (!breve) {
     const dt = document.createElement("div");
@@ -82,7 +138,11 @@ function criarCartao(j, breve) {
     dt.textContent = j.atualizado_em
       ? "Atualizado em " + dataBR(j.atualizado_em)
       : "Lançado em " + dataBR(j.criado_em);
-    const jg = document.createElement("div"); jg.className = "cat"; const n = jogadas[j.id] || 0; jg.textContent = "👥 " + n + (n === 1 ? " pessoa jogou" : " pessoas jogaram"); info.append(criarEstrelas(notas[j.id]), dt, jg);
+    const jg = document.createElement("div");
+    jg.className = "cat";
+    const n = jogadas[j.id] || 0;
+    jg.textContent = "👥 " + n + (n === 1 ? " pessoa jogou" : " pessoas jogaram");
+    info.append(criarEstrelas(notas[j.id]), dt, jg);
   }
 
   cartao.append(capa, info);
@@ -128,6 +188,12 @@ function mostrarJogos() {
   catalogo.innerHTML = "";
   let total = 0;
 
+  const meus = filtrados.filter((j) => favoritos.has(j.id) && lancado(j));
+  if (categoriaAtual === "Todas" && meus.length) {
+    catalogo.appendChild(criarFileira("Meus favoritos", meus, false));
+    total++;
+  }
+
   const novos = filtrados.filter(lancado);
   if (categoriaAtual === "Todas" && novos.length) {
     catalogo.appendChild(criarFileira("Novidades", novos, false));
@@ -163,6 +229,8 @@ function mostrarJogos() {
 }
 
 async function carregar() {
+  try { await garantirLogin(); } catch (e) { console.error(e); }
+
   const { data, error } = await db
     .from("games")
     .select("*")
@@ -185,7 +253,17 @@ async function carregar() {
     notas[a.jogo_id] = n;
   });
 
-  const { data: cont } = await db.from("contagem_jogadas").select("jogo_id, total"); jogadas = {}; (cont || []).forEach((c) => { jogadas[c.jogo_id] = c.total; });
+  const { data: cont } = await db.from("contagem_jogadas").select("jogo_id, total");
+  jogadas = {};
+  (cont || []).forEach((c) => { jogadas[c.jogo_id] = c.total; });
+
+  const { data: pf } = await db.from("perfis").select("id, nome");
+  autores = {};
+  (pf || []).forEach((p) => { autores[p.id] = p.nome; });
+
+  const { data: fv } = await db.from("favoritos").select("jogo_id");
+  favoritos = new Set((fv || []).map((f) => f.jogo_id));
+
   criarCategorias();
   mostrarJogos();
 }
