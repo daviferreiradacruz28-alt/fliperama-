@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Perfil</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="perfil.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#171a21">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    .suave { color: var(--texto-suave); font-size: 0.9rem; }
+    .cab-perfil { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+    .foto-grande {
+      width: 96px; height: 96px; flex-shrink: 0; overflow: hidden;
+      display: grid; place-items: center; font-size: 2.5rem;
+      background: var(--fundo-escuro); border-radius: 50%;
+    }
+    .foto-grande img { width: 100%; height: 100%; object-fit: cover; }
+  </style>
+</head>
+<body>
+  <header class="topo">
+    <h1>ZENO</h1>
+    <a class="botao" href="index.html">Voltar</a>
+  </header>
+
+  <main>
+    <div class="cab-perfil">
+      <div id="foto" class="foto-grande">👤</div>
+      <div>
+        <h2 id="nome">Carregando...</h2>
+        <p id="resumo" class="suave"></p>
+      </div>
+    </div>
+
+    <section class="fileira">
+      <h2 class="fileira-titulo">Jogos criados</h2>
+      <div id="jogos" class="fileira-lista"></div>
+    </section>
+
+    <section id="sec-fav" class="fileira" hidden>
+      <h2 class="fileira-titulo">Meus favoritos</h2>
+      <div id="favs" class="fileira-lista"></div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <script>
+    const id = new URLSearchParams(location.search).get("id");
+
+    function urlCapa(caminho) {
+      if (!caminho) return null;
+      return db.storage.from("covers").getPublicUrl(caminho).data.publicUrl;
+    }
+
+    function criarCartao(j) {
+      const cartao = document.createElement("a");
+      cartao.className = "cartao";
+      cartao.href = "game.html?id=" + j.id;
+
+      const capa = document.createElement("div");
+      capa.className = "capa";
+      const url = urlCapa(j.capa);
+      if (url) {
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = "";
+        img.className = "capa-img";
+        capa.appendChild(img);
+      } else {
+        capa.textContent = "🎮";
+      }
+
+      const info = document.createElement("div");
+      info.className = "info";
+      const titulo = document.createElement("h2");
+      titulo.textContent = j.nome;
+      const cat = document.createElement("div");
+      cat.className = "cat";
+      const breve = j.lancamento_em && new Date(j.lancamento_em) > new Date();
+      cat.textContent = (j.categoria || "") + (breve ? " · Em breve" : "");
+      info.append(titulo, cat);
+
+      cartao.append(capa, info);
+      return cartao;
+    }
+
+    function preencher(caixa, lista, textoVazio) {
+      caixa.innerHTML = "";
+      if (!lista.length) {
+        const p = document.createElement("p");
+        p.className = "suave";
+        p.textContent = textoVazio;
+        caixa.appendChild(p);
+        return;
+      }
+      lista.forEach((j) => caixa.appendChild(criarCartao(j)));
+    }
+
+    async function abrir() {
+      await garantirLogin();
+      const { data: sessao } = await db.auth.getSession();
+      const meu = sessao.session ? sessao.session.user.id : null;
+      const alvo = id || meu;
+      if (!alvo) { document.getElementById("nome").textContent = "Perfil não encontrado"; return; }
+
+      const { data: p } = await db.from("perfis").select("nome, foto").eq("id", alvo).maybeSingle();
+      document.getElementById("nome").textContent = p ? p.nome : "Anônimo";
+      document.title = p ? p.nome : "Perfil";
+      if (p && p.foto) {
+        const img = document.createElement("img");
+        img.src = p.foto;
+        img.alt = "";
+        const caixa = document.getElementById("foto");
+        caixa.textContent = "";
+        caixa.appendChild(img);
+      }
+
+      const { data: jogos } = await db.from("games").select("*")
+        .eq("autor", alvo).order("criado_em", { ascending: false });
+      const lista = jogos || [];
+      document.getElementById("resumo").textContent =
+        lista.length + (lista.length === 1 ? " jogo criado" : " jogos criados");
+      preencher(document.getElementById("jogos"), lista, "Nenhum jogo criado ainda.");
+
+      // Favoritos: só aparecem no seu próprio perfil
+      if (alvo === meu) {
+        document.getElementById("sec-fav").hidden = false;
+        const { data: fav } = await db.from("favoritos").select("jogo_id");
+        const ids = (fav || []).map((f) => f.jogo_id);
+        let favoritos = [];
+        if (ids.length) {
+          const { data: jf } = await db.from("games").select("*").in("id", ids);
+          favoritos = jf || [];
+        }
+        preencher(document.getElementById("favs"), favoritos, "Você ainda não favoritou nenhum jogo.");
+      }
+    }
+
+    abrir();
+  </script>
+  <script src="perfil.js"></script>
+</body>
+</html>

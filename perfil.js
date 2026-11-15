@@ -3,6 +3,8 @@
   const topo = document.querySelector(".topo");
   if (!topo) return;
 
+  const temBanco = typeof db !== "undefined" && typeof garantirLogin === "function";
+
   function lerPerfil() {
     try { return JSON.parse(localStorage.getItem(CHAVE)); } catch (e) { return null; }
   }
@@ -11,6 +13,36 @@
   }
   function apagarPerfil() {
     try { localStorage.removeItem(CHAVE); } catch (e) {}
+  }
+
+  async function meuId() {
+    await garantirLogin();
+    const { data } = await db.auth.getSession();
+    return data.session ? data.session.user.id : null;
+  }
+
+  // Envia o perfil local para o Supabase, para os outros poderem ver
+  async function sincronizar() {
+    if (!temBanco) return;
+    const p = lerPerfil();
+    if (!p) return;
+    try {
+      const uid = await meuId();
+      if (!uid) return;
+      const { error } = await db.from("perfis").upsert({ id: uid, nome: p.nome, foto: p.foto || null });
+      if (error) throw error;
+      try { sessionStorage.setItem("perfil-sync", "1"); } catch (e) {}
+    } catch (e) {
+      console.error("Perfil não sincronizado:", e);
+    }
+  }
+
+  async function removerPublico() {
+    if (!temBanco) return;
+    try {
+      const uid = await meuId();
+      if (uid) await db.from("perfis").delete().eq("id", uid);
+    } catch (e) {}
   }
 
   function reduzirFoto(arquivo) {
@@ -109,9 +141,22 @@
     nome.textContent = p.nome;
     const acoesModal = document.createElement("div");
     acoesModal.className = "modal-acoes";
+    acoesModal.append(criarBotao("Editar", "", () => abrirModal(telaCadastro())));
+    if (temBanco) {
+      acoesModal.append(criarBotao("Perfil público", "", async () => {
+        await sincronizar();
+        const uid = await meuId();
+        if (uid) location.href = "perfil.html?id=" + uid;
+      }));
+    }
     acoesModal.append(
-      criarBotao("Editar", "", () => abrirModal(telaCadastro())),
-      criarBotao("Sair", "neutro", () => { apagarPerfil(); atualizarBotao(); fechar(); }),
+      criarBotao("Sair", "neutro", async () => {
+        await removerPublico();
+        apagarPerfil();
+        try { sessionStorage.removeItem("perfil-sync"); } catch (e) {}
+        atualizarBotao();
+        fechar();
+      }),
       criarBotao("Fechar", "neutro", fechar)
     );
     div.append(criarAvatar(p.foto, "perfil-foto"), nome, acoesModal);
@@ -140,6 +185,10 @@
     campoFoto.type = "file";
     campoFoto.accept = "image/*";
     l2.appendChild(campoFoto);
+
+    const aviso = document.createElement("p");
+    aviso.className = "suave";
+    aviso.textContent = "Seu nome e sua foto ficam visíveis para quem usa o site.";
 
     const status = document.createElement("p");
     status.id = "status";
@@ -176,11 +225,13 @@
         status.textContent = "Não foi possível salvar neste navegador.";
         return;
       }
+      status.textContent = "Salvando...";
+      await sincronizar();
       atualizarBotao();
       abrirModal(telaVer());
     });
 
-    form.append(titulo, l1, l2, status, acoesModal);
+    form.append(titulo, l1, l2, aviso, status, acoesModal);
     return form;
   }
 
@@ -189,6 +240,11 @@
   });
 
   atualizarBotao();
+
+  // Uma vez por sessão, garante que o perfil local também está no Supabase
+  let sincronizado = null;
+  try { sincronizado = sessionStorage.getItem("perfil-sync"); } catch (e) {}
+  if (lerPerfil() && !sincronizado) sincronizar();
 
   // Na primeira visita, pede o cadastro (só na página inicial, uma vez por sessão)
   let pulou = null;
